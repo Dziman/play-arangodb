@@ -1,0 +1,14 @@
+.classpath
+.project
+.cache
+*.class
+*.log
+target/
+logs/
+.DS_Store
+.idea
+.history
+.ensime
+.ensime_cache/
+*~
+\#*#
