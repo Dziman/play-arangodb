@@ -1,3 +1,5 @@
+organization := "xyz.dziman"
+
 lazy val `play-arangodb` = (project in file(".")).enablePlugins(PlayLibrary)
 
 val PlayVersion = playVersion("2.4.6")
