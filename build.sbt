@@ -10,6 +10,7 @@ scalacOptions ++= Seq("-language:postfixOps")
 
 libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play" % PlayVersion % Provided,
+  "com.typesafe.play" %% "play-ws" % PlayVersion % Provided,
   "com.typesafe.play" %% "play-specs2" % PlayVersion % Test
 )
 
