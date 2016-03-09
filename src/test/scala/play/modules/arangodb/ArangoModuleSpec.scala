@@ -3,7 +3,6 @@ package play.modules.arangodb
 import com.google.inject
 import org.specs2.mutable.Specification
 import play.api.inject.guice.GuiceApplicationBuilder
-import play.api.inject.bind
 
 object ArangoModuleSpec extends Specification {
   "Play integration" title
@@ -17,7 +16,7 @@ object ArangoModuleSpec extends Specification {
     }
 
     "not be resolved if mandatory settings not set" in {
-      applicationBuilderWithModule.build.injector.instanceOf[ArangoApi].
+      applicationWithModule.injector.instanceOf[ArangoApi].
         aka("Arango API") must throwA[com.google.inject.ProvisionException]
     }
 
@@ -26,9 +25,18 @@ object ArangoModuleSpec extends Specification {
           aka("Arango API") must beAnInstanceOf[DefaultArangoApi]
     }
 
+    "not be resolved if user is set without password" in {
+      applicationWithUserOnly.injector.instanceOf[ArangoApi].
+        aka("Arango API") must throwA[RuntimeException]
+    }
+
+    "be resolved if auth is set properly" in {
+      applicationWithAuth.injector.instanceOf[ArangoApi].
+        aka("Arango API") must beAnInstanceOf[DefaultArangoApi]
+    }
   }
 
-  def applicationBuilderWithModule = {
+  def applicationWithModule = {
     import scala.collection.JavaConversions.iterableAsScalaIterable
 
     val env = play.api.Environment.simple(mode = play.api.Mode.Test)
@@ -40,5 +48,9 @@ object ArangoModuleSpec extends Specification {
 
   }
 
-  def validApplication = applicationBuilderWithModule.configure("play.arangodb.db" -> "db").build
+  def validApplication = applicationWithModule.configure("play.arangodb.db" -> "mydb")
+
+  def applicationWithUserOnly = validApplication.configure("play.arangodb.user" -> "someUser")
+
+  def applicationWithAuth = applicationWithUserOnly.configure("play.arangodb.password" -> "secret")
 }
