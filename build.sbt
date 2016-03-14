@@ -17,3 +17,7 @@ libraryDependencies ++= Seq(
 resolvers += "scalaz-bintray" at "https://dl.bintray.com/scalaz/releases"
 
 playBuildRepoName in ThisBuild := "play-arangodb"
+
+parallelExecution in Test := false
+
+testOptions in Test += Tests.Argument("sequential")

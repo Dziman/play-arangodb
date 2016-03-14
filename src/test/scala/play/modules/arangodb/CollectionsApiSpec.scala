@@ -8,34 +8,38 @@ object CollectionsApiSpec extends PlayArangoSpec {
 
   private val notExistingCollectionName: String = "not-existing-collection"
 
-  private val collectionForTest: String = "_users"
+  private val collectionForTest: String = "test-collection"
 
   "Arango API" should {
-    "return none for info with not existing collection" in {
+    "return none for info with not existing collection" in new WithFreshDb {
       await(api.collectionInfo(name = notExistingCollectionName)) must be empty
     }
 
-    "return collection info" in {
+    "return collection info" in new WithFreshDb {
       val collectionInfoResult = await(api.collectionInfo(name = collectionForTest))
       collectionInfoResult must be some
       val collectionInfo = collectionInfoResult.get
       collectionInfo.name must be_==(collectionForTest)
-      collectionInfo.isSystem must be_==(true)
+      collectionInfo.isSystem must be_==(false)
     }
 
-    "return none if call count for not existing collection" in {
+    "return none if call count for not existing collection" in new WithFreshDb {
       await(api.collectionDocumetsCount(name = notExistingCollectionName)) must be empty
     }
 
-    "count documents number in collection" in {
-      await(api.collectionDocumetsCount(name = collectionForTest)) getOrElse 0L must be_>(0L)
+    "count documents number in collection" in new WithFreshDb {
+      await(api.collectionDocumetsCount(name = collectionForTest)) getOrElse 0L === 2L
     }
 
-    "return none for properties with not existing collection" in {
+    "return 0 as documents number for empty collection" in new WithFreshDb {
+      await(api.collectionDocumetsCount(name = "empty-collection")) getOrElse -1L === 0L
+    }
+
+    "return none for properties with not existing collection" in new WithFreshDb {
       await(api.collectionProperties(name = notExistingCollectionName)) must be empty
     }
 
-    "return collection properties" in {
+    "return collection properties" in new WithFreshDb {
       val collectionPropertiesResult = await(api.collectionProperties(name = collectionForTest))
       collectionPropertiesResult must be some
       val collectionProperties = collectionPropertiesResult.get
@@ -43,11 +47,11 @@ object CollectionsApiSpec extends PlayArangoSpec {
       collectionProperties.figures must be empty
     }
 
-    "return none for statistics with not existing collection" in {
+    "return none for statistics with not existing collection" in new WithFreshDb {
       await(api.collectionStatistics(name = notExistingCollectionName)) must be empty
     }
 
-    "return collection statistics" in {
+    "return collection statistics" in new WithFreshDb {
       val collectionStatisticsResult = await(api.collectionStatistics(name = collectionForTest))
       collectionStatisticsResult must be some
       val collectionStatistics = collectionStatisticsResult.get
@@ -55,11 +59,11 @@ object CollectionsApiSpec extends PlayArangoSpec {
       collectionStatistics.figures must be some
     }
 
-    "return none for revision with not existing collection" in {
+    "return none for revision with not existing collection" in new WithFreshDb {
       await(api.collectionRevision(name = notExistingCollectionName)) must be empty
     }
 
-    "return collection revision" in {
+    "return collection revision" in new WithFreshDb {
       val collectionRevisionResult = await(api.collectionRevision(name = collectionForTest))
       collectionRevisionResult must be some
       val collectionRevision = collectionRevisionResult.get
@@ -67,11 +71,11 @@ object CollectionsApiSpec extends PlayArangoSpec {
       collectionRevision.revision must be some
     }
 
-    "return none for checksum with not existing collection" in {
+    "return none for checksum with not existing collection" in new WithFreshDb {
       await(api.collectionChecksum(name = notExistingCollectionName)) must be empty
     }
 
-    "return collection checksum" in {
+    "return collection checksum" in new WithFreshDb {
       val ch1Result = await(api.collectionChecksum(name = collectionForTest))
       ch1Result must be some
       val ch1 = ch1Result.get.checksum
@@ -93,6 +97,11 @@ object CollectionsApiSpec extends PlayArangoSpec {
       val ch5 = ch5Result.get.checksum
       ch5 must be some
 
+      ch1 === Some(172416944L)
+      ch3 === Some(2742834720L)
+      ch5 === Some(172416944L)
+      // can't check checksums calculated withRevisions = true due to every db restore changes revision
+
       ch1 must be_!=(ch2)
       ch1 must be_!=(ch3)
       ch1 must be_!=(ch4)
@@ -107,22 +116,22 @@ object CollectionsApiSpec extends PlayArangoSpec {
       await(api.collections()) must be empty
     }
 
-    "show non-system collections" in {
+    "show non-system collections" in new WithFreshDb {
       val collectionsResult = await(api.collections())
       collectionsResult must be some
       val collections = collectionsResult.get
-      collections.collections must have size 0
+      collections.collections must have size 2
       val collectionsExplicitSystemResult = await(api.collections(withSystem = false))
       collectionsExplicitSystemResult must be some
       val collectionsExplisitSystem = collectionsExplicitSystemResult.get
       collectionsExplisitSystem must be_==(collections)
     }
 
-    "show collections(including system)" in {
+    "show collections(including system)" in new WithFreshDb {
       val collectionsResult = await(api.collections(withSystem = true))
       collectionsResult must be some
       val collections = collectionsResult.get
-      collections.collections must not have size(0)
+      collections.collections must have size 14
     }
 
   }
