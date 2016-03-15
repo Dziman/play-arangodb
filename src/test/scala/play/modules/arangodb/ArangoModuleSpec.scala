@@ -20,8 +20,8 @@ object ArangoModuleSpec extends PlayArangoSpec {
     }
 
     "be resolved if the module is enabled" in {
-      validApplication.injector.instanceOf[ArangoApi].
-          aka("Arango API") must beAnInstanceOf[DefaultArangoApi]
+      validApplication.injector.instanceOf[ArangoApi].Collection.
+          aka("Arango API") must beAnInstanceOf[RestCollectionApi]
     }
 
     "not be resolved if user is set without password" in {
@@ -30,8 +30,8 @@ object ArangoModuleSpec extends PlayArangoSpec {
     }
 
     "be resolved if auth is set properly" in {
-      applicationWithAuth.injector.instanceOf[ArangoApi].
-        aka("Arango API") must beAnInstanceOf[DefaultArangoApi]
+      applicationWithAuth.injector.instanceOf[ArangoApi].Collection.
+        aka("Arango API") must beAnInstanceOf[RestCollectionApi]
     }
   }
 
