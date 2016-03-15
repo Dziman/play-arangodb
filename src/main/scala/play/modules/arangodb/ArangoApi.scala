@@ -13,7 +13,8 @@ case class ArangoConfiguration(
                                 ssl: Boolean,
                                 user: Option[String],
                                 password: Option[String],
-                                db: String
+                                db: String,
+                                timeout: Int
                               )
 
 object ArangoConfiguration {
@@ -27,7 +28,8 @@ object ArangoConfiguration {
       config.get[Boolean]("ssl"),
       user,
       password,
-      config.get[String]("db")
+      config.get[String]("db"),
+      config.get[Int]("timeout")
     )
   }
 }

@@ -40,11 +40,10 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
                                          handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
                                        )(implicit objectReads: Reads[T]): Future[Option[T]] = {
     try {
-      // TODO Extract timeout to config
       // TODO Add proxy support?
       var request = ws.url(s"$baseUrl/$url").
         withMethod(method).
-        withRequestTimeout(15 * 1000).
+        withRequestTimeout(conf.timeout * 1000).
         withFollowRedirects(true).
         withQueryString(query: _*).
         withHeaders(headers: _*).
