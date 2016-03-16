@@ -1,11 +1,15 @@
-package play.modules.arangodb
+package play.modules
+package arangodb
 
 import java.net.ConnectException
 import javax.inject.Inject
 
+import play.api.http.Writeable
+import play.api.libs
+import play.api.libs.json
 import play.api.libs.json._
 import play.api.libs.ws.WSAuthScheme.BASIC
-import play.api.libs.ws.{EmptyBody, WSBody, WSClient}
+import play.api.libs.ws.{WSClient, WSRequest}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -16,11 +20,19 @@ trait RequestExecutor {
   private[play] def execute[T](
                                 method: String = "GET",
                                 url: String,
-                                body: WSBody = EmptyBody,
                                 query: Seq[(String, String)] = Seq.empty,
                                 headers: Seq[(String, String)] = Seq.empty,
                                 handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
                               )(implicit objectReads: Reads[T]): Future[Option[T]]
+
+  private[play] def executeWithBody[T, B](
+                                           method: String = "POST",
+                                           url: String,
+                                           body: B,
+                                           query: Seq[(String, String)] = Seq.empty,
+                                           headers: Seq[(String, String)] = Seq.empty,
+                                           handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
+                                         )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Option[T]]
 }
 
 class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) extends RequestExecutor {
@@ -34,22 +46,47 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
   override private[play] def execute[T](
                                          method: String = "GET",
                                          url: String,
-                                         body: WSBody = EmptyBody,
                                          query: Seq[(String, String)] = Seq.empty,
                                          headers: Seq[(String, String)] = Seq.empty,
                                          handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
                                        )(implicit objectReads: Reads[T]): Future[Option[T]] = {
-    try {
-      // TODO Add proxy support?
-      var request = ws.url(s"$baseUrl/$url").
-        withMethod(method).
-        withRequestTimeout(conf.timeout * 1000).
-        withFollowRedirects(true).
-        withQueryString(query: _*).
-        withHeaders(headers: _*).
-        withBody(body)
-      request = conf.user.fold(request) { userName => request.withAuth(userName, conf.password.get, BASIC) }
+    val request = prepareRequest(method, url, query, headers)
+    executeInternally(request, handlers)
+  }
 
+  override private[play] def executeWithBody[T, B](
+                                         method: String = "POST",
+                                         url: String,
+                                         body: B,
+                                         query: Seq[(String, String)] = Seq.empty,
+                                         headers: Seq[(String, String)] = Seq.empty,
+                                         handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
+                                       )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Option[T]] = {
+    val request = prepareRequest(method, url, query, headers).withBody(Json.toJson(body))
+    executeInternally(request, handlers)
+  }
+
+  private def prepareRequest(
+                              method: String,
+                              url: String,
+                              query: Seq[(String, String)],
+                              headers: Seq[(String, String)]) = {
+    // TODO Add proxy support?
+   val request =  ws.url(s"$baseUrl/$url").
+      withMethod(method).
+      withRequestTimeout(conf.timeout * 1000).
+      withFollowRedirects(true).
+      withQueryString(query: _*).
+      withHeaders(headers: _*)
+
+    conf.user.fold(request) { userName => request.withAuth(userName, conf.password.get, BASIC) }
+  }
+
+  private def executeInternally[T](
+                                    request: WSRequest,
+                                    handlers: Seq[(Int, Option[JsValue] => Option[T])]
+                                  )(implicit objectReads: Reads[T]): Future[Option[T]] = {
+    try {
       request.execute() map { response =>
         //noinspection SimplifyBoolean
         response.status match {
@@ -84,7 +121,7 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
               statusWithHandler == status
             }
             // TODO Try to get standard ArangoDB response fields (error, errorNumber etc.) and process according this info
-            if (suitableHandlers.isEmpty) throw new ArangoException(601, s"Unexpected response status code $status")
+            if (suitableHandlers.isEmpty) throw new ArangoException(status, s"Unexpected response status code")
 
             val json = if (response.body.nonEmpty) Some(response.json) else None
             // more than one handler is meaningless so exec the first one and ignore other

@@ -1,4 +1,5 @@
-package play.modules.arangodb
+package play.modules
+package arangodb
 
 import javax.inject.{Inject, Provider, Singleton}
 

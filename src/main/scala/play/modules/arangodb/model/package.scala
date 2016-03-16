@@ -16,6 +16,11 @@ package object model {
   implicit val collectionsJsonReads = Json.reads[Collections]
   implicit val compactionStatusJsonReads = Json.reads[CompactionStatus]
   implicit val figureJsonReads = Json.reads[Figure]
-  implicit val collectionStatisticsJsonReads = Json.reads[Figures]
+  implicit val figuresJsonReads = Json.reads[Figures]
+  implicit val keyOptionsJsonReads = Json.reads[KeyOptions]
   implicit val collectionPropertiesJsonReads = Json.reads[CollectionProperties]
+
+  implicit val keyOptionsJsonWrites = Json.writes[KeyOptions]
+  implicit val collectionCreatePropertiesJsonWrites = Json.writes[CollectionCreateProperties]
+
 }

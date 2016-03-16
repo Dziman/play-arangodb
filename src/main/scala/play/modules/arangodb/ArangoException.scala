@@ -1,4 +1,5 @@
-package play.modules.arangodb
+package play.modules
+package arangodb
 
 /**
   * Exception thrown when some problem occurred with ArangoDB communication.
