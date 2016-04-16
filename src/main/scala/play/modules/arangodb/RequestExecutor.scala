@@ -4,9 +4,7 @@ package arangodb
 import java.net.ConnectException
 import javax.inject.Inject
 
-import play.api.http.Writeable
 import play.api.libs
-import play.api.libs.json
 import play.api.libs.json._
 import play.api.libs.ws.WSAuthScheme.BASIC
 import play.api.libs.ws.{WSClient, WSRequest}
@@ -22,7 +20,7 @@ trait RequestExecutor {
                                 url: String,
                                 query: Seq[(String, String)] = Seq.empty,
                                 headers: Seq[(String, String)] = Seq.empty,
-                                handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
+                                handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
                               )(implicit objectReads: Reads[T]): Future[Option[T]]
 
   private[play] def executeWithBody[T, B](
@@ -31,10 +29,21 @@ trait RequestExecutor {
                                            body: B,
                                            query: Seq[(String, String)] = Seq.empty,
                                            headers: Seq[(String, String)] = Seq.empty,
-                                           handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
+                                           handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
                                          )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Option[T]]
+
+  private[play] def defaultSuccessHandler[T](
+                                              body: Option[JsValue],
+                                              headers: Map[String, Seq[String]]
+                                            )(implicit objectReads: Reads[T]): Option[T]
+
+  private[play] def defaultNotfoundHandler[T](
+                                               body: Option[JsValue],
+                                               headers: Map[String, Seq[String]]
+                                             )(implicit objectReads: Reads[T]): Option[T]
 }
 
+// TODO Do not use shared WSClient and create our own?
 class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) extends RequestExecutor {
   lazy protected val baseUrl = constructBaseUrl
 
@@ -48,7 +57,7 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
                                          url: String,
                                          query: Seq[(String, String)] = Seq.empty,
                                          headers: Seq[(String, String)] = Seq.empty,
-                                         handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
+                                         handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
                                        )(implicit objectReads: Reads[T]): Future[Option[T]] = {
     val request = prepareRequest(method, url, query, headers)
     executeInternally(request, handlers)
@@ -60,7 +69,7 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
                                          body: B,
                                          query: Seq[(String, String)] = Seq.empty,
                                          headers: Seq[(String, String)] = Seq.empty,
-                                         handlers: Seq[(Int, Option[JsValue] => Option[T])] = Seq.empty
+                                         handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
                                        )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Option[T]] = {
     val request = prepareRequest(method, url, query, headers).withBody(Json.toJson(body))
     executeInternally(request, handlers)
@@ -84,7 +93,7 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
 
   private def executeInternally[T](
                                     request: WSRequest,
-                                    handlers: Seq[(Int, Option[JsValue] => Option[T])]
+                                    handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])]
                                   )(implicit objectReads: Reads[T]): Future[Option[T]] = {
     try {
       request.execute() map { response =>
@@ -109,9 +118,9 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
               status == 500
           => throw new ArangoException(status, response.statusText)
           case status if true || status >= 200 && status <= 299 =>
-            val defaultHandlers: Seq[(Int, Option[JsValue] => Option[T])] = List(
-              (200, body => body.map { json => parseResponseJson[T](json) }),
-              (404, _ => None)
+            val defaultHandlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = List(
+              (200, defaultSuccessHandler[T]),
+              (404, defaultNotfoundHandler[T])
             )
 
             val status = response.status
@@ -125,13 +134,23 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
 
             val json = if (response.body.nonEmpty) Some(response.json) else None
             // more than one handler is meaningless so exec the first one and ignore other
-            suitableHandlers.head._2(json)
+            suitableHandlers.head._2(json, response.allHeaders)
         }
       }
     } catch {
       case _: ConnectException => throw new ArangoException(408, "No response from ArangoDB server.")
     }
   }
+
+  override def defaultSuccessHandler[T](
+                                         body: Option[JsValue],
+                                         headers: Map[String, Seq[String]]
+                                       )(implicit objectReads: Reads[T]): Option[T] = body.map { json => parseResponseJson[T](json) }
+
+  override def defaultNotfoundHandler[T](
+                                          body: Option[JsValue],
+                                          headers: Map[String, Seq[String]]
+                                        )(implicit objectReads: Reads[T]): Option[T] = None
 
   private def parseResponseJson[T](json: JsValue)(implicit objectReads: Reads[T]): T = {
     json.validate[T] fold(

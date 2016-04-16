@@ -13,7 +13,8 @@ final class ArangoModule extends Module {
     Seq(
       bind[ArangoConfiguration].toProvider[ArangoConfigurationProvider],
       bind[RequestExecutor].to[DefaultRequestExecutor].in[Singleton],
-      bind[CollectionApi].to[RestCollectionApi].in[Singleton]
+      bind[CollectionApi].to[RestCollectionApi].in[Singleton],
+      bind[DocumentApi].to[RestDocumentApi].in[Singleton]
     )
 }
 

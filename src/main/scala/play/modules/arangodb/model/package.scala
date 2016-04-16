@@ -5,6 +5,7 @@ import org.joda.time.format.DateTimeFormat
 import play.api.libs.json._
 
 package object model {
+  // General JSON Reads
   implicit val dateReads = new Reads[DateTime] {
     val dateFormatter = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss'Z'")
 
@@ -12,6 +13,8 @@ package object model {
       JsSuccess(DateTime.parse(js.as[String], dateFormatter))
     }
   }
+
+  // JSON Reads/Writes for Collection API
   implicit val collectionJsonReads = Json.reads[Collection]
   implicit val collectionsJsonReads = Json.reads[Collections]
   implicit val compactionStatusJsonReads = Json.reads[CompactionStatus]
@@ -23,4 +26,7 @@ package object model {
   implicit val keyOptionsJsonWrites = Json.writes[KeyOptions]
   implicit val collectionCreatePropertiesJsonWrites = Json.writes[CollectionCreateProperties]
 
+  //JSON Reads/Writes for Document API
+  implicit val documentsJsonReads = Json.reads[Documents]
+  implicit val removeDocumentResultJsonReads = Json.reads[RemoveDocumentResult]
 }

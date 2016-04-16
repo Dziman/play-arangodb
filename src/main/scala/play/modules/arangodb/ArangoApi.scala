@@ -5,7 +5,7 @@ import javax.inject.Inject
 
 import play.api.PlayConfig
 
-case class ArangoApi @Inject()(Collection: CollectionApi)
+case class ArangoApi @Inject()(Collection: CollectionApi, Document: DocumentApi)
 
 case class ArangoConfiguration(
                                 host: String,

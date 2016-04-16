@@ -90,11 +90,11 @@ final class RestCollectionApi @Inject()(requestExecutor: RequestExecutor) extend
   }
 
   override def drop(name: String): Future[Option[String]] = {
-    def successHandler(body: Option[JsValue]) = body map { json => (json \ "id").as[String] }
+    def successHandler(body: Option[JsValue], headers: Map[String, Seq[String]]) = body map { json => (json \ "id").as[String] }
     requestExecutor.execute[String](
       method = "DELETE",
       url = s"collection/$name",
-      handlers = List((200, successHandler))
+      handlers = List((200,  successHandler))
     )
   }
 
@@ -122,13 +122,13 @@ final class RestCollectionApi @Inject()(requestExecutor: RequestExecutor) extend
       method = "PUT",
       url = s"collection/$name/rename",
       body = Json.obj("name" -> newName),
-      handlers = List((409, _ => None))
+      handlers = List((409, (_, _) => None))
     )
   }
 
   override def rotate(name: String): Future[Option[Boolean]] = {
-    def successHandler(body: Option[JsValue]) = body map { json => (json \ "result").as[Boolean] }
-    def noJournalHandler(body: Option[JsValue]) = body map  { json => !(json \ "errorNum").asOpt[Int].contains(1105) }
+    def successHandler(body: Option[JsValue], headers: Map[String, Seq[String]]) = body map { json => (json \ "result").as[Boolean] }
+    def noJournalHandler(body: Option[JsValue], headers: Map[String, Seq[String]]) = body map  { json => !(json \ "errorNum").asOpt[Int].contains(1105) }
     requestExecutor.execute[Boolean](
       method = "PUT",
       url = s"collection/$name/rotate",
