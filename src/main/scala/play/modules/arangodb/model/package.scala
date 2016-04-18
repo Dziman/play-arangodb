@@ -13,6 +13,7 @@ package object model {
       JsSuccess(DateTime.parse(js.as[String], dateFormatter))
     }
   }
+  implicit val errorJsonReads = Json.reads[ArangoError]
 
   // JSON Reads/Writes for Collection API
   implicit val collectionJsonReads = Json.reads[Collection]

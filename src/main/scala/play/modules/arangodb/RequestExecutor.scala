@@ -4,10 +4,10 @@ package arangodb
 import java.net.ConnectException
 import javax.inject.Inject
 
-import play.api.libs
 import play.api.libs.json._
 import play.api.libs.ws.WSAuthScheme.BASIC
-import play.api.libs.ws.{WSClient, WSRequest}
+import play.api.libs.ws.{WSClient, WSRequest, WSResponse}
+import play.modules.arangodb.model._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -20,8 +20,8 @@ trait RequestExecutor {
                                 url: String,
                                 query: Seq[(String, String)] = Seq.empty,
                                 headers: Seq[(String, String)] = Seq.empty,
-                                handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
-                              )(implicit objectReads: Reads[T]): Future[Option[T]]
+                                handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Either[ArangoError, T])] = Seq.empty
+                              )(implicit objectReads: Reads[T]): Future[Either[ArangoError, T]]
 
   private[play] def executeWithBody[T, B](
                                            method: String = "POST",
@@ -29,18 +29,13 @@ trait RequestExecutor {
                                            body: B,
                                            query: Seq[(String, String)] = Seq.empty,
                                            headers: Seq[(String, String)] = Seq.empty,
-                                           handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
-                                         )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Option[T]]
+                                           handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Either[ArangoError, T])] = Seq.empty
+                                         )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Either[ArangoError, T]]
 
   private[play] def defaultSuccessHandler[T](
                                               body: Option[JsValue],
                                               headers: Map[String, Seq[String]]
-                                            )(implicit objectReads: Reads[T]): Option[T]
-
-  private[play] def defaultNotfoundHandler[T](
-                                               body: Option[JsValue],
-                                               headers: Map[String, Seq[String]]
-                                             )(implicit objectReads: Reads[T]): Option[T]
+                                            )(implicit objectReads: Reads[T]): Either[ArangoError, T]
 }
 
 // TODO Do not use shared WSClient and create our own?
@@ -57,20 +52,20 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
                                          url: String,
                                          query: Seq[(String, String)] = Seq.empty,
                                          headers: Seq[(String, String)] = Seq.empty,
-                                         handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
-                                       )(implicit objectReads: Reads[T]): Future[Option[T]] = {
+                                         handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Either[ArangoError, T])] = Seq.empty
+                                       )(implicit objectReads: Reads[T]): Future[Either[ArangoError, T]] = {
     val request = prepareRequest(method, url, query, headers)
     executeInternally(request, handlers)
   }
 
   override private[play] def executeWithBody[T, B](
-                                         method: String = "POST",
-                                         url: String,
-                                         body: B,
-                                         query: Seq[(String, String)] = Seq.empty,
-                                         headers: Seq[(String, String)] = Seq.empty,
-                                         handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = Seq.empty
-                                       )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Option[T]] = {
+                                                    method: String = "POST",
+                                                    url: String,
+                                                    body: B,
+                                                    query: Seq[(String, String)] = Seq.empty,
+                                                    headers: Seq[(String, String)] = Seq.empty,
+                                                    handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Either[ArangoError, T])] = Seq.empty
+                                                  )(implicit objectReads: Reads[T], bodyWrites: Writes[B]): Future[Either[ArangoError, T]] = {
     val request = prepareRequest(method, url, query, headers).withBody(Json.toJson(body))
     executeInternally(request, handlers)
   }
@@ -81,7 +76,7 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
                               query: Seq[(String, String)],
                               headers: Seq[(String, String)]) = {
     // TODO Add proxy support?
-   val request =  ws.url(s"$baseUrl/$url").
+    val request = ws.url(s"$baseUrl/$url").
       withMethod(method).
       withRequestTimeout(conf.timeout * 1000).
       withFollowRedirects(true).
@@ -93,8 +88,8 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
 
   private def executeInternally[T](
                                     request: WSRequest,
-                                    handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])]
-                                  )(implicit objectReads: Reads[T]): Future[Option[T]] = {
+                                    handlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Either[ArangoError, T])]
+                                  )(implicit objectReads: Reads[T]): Future[Either[ArangoError, T]] = {
     try {
       request.execute() map { response =>
         //noinspection SimplifyBoolean
@@ -116,11 +111,10 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
               status == 405 ||
               status == 413 || status == 414 || status == 431 ||
               status == 500
-          => throw new ArangoException(status, response.statusText)
+          => defaultErrorHandler(response)
           case status if true || status >= 200 && status <= 299 =>
-            val defaultHandlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Option[T])] = List(
-              (200, defaultSuccessHandler[T]),
-              (404, defaultNotfoundHandler[T])
+            val defaultHandlers: Seq[(Int, (Option[JsValue], Map[String, Seq[String]]) => Either[ArangoError, T])] = List(
+              (200, defaultSuccessHandler[T])
             )
 
             val status = response.status
@@ -129,33 +123,45 @@ class DefaultRequestExecutor @Inject()(conf: ArangoConfiguration, ws: WSClient) 
               val (statusWithHandler, _) = handlerForStatus
               statusWithHandler == status
             }
-            // TODO Try to get standard ArangoDB response fields (error, errorNumber etc.) and process according this info
-            if (suitableHandlers.isEmpty) throw new ArangoException(status, s"Unexpected response status code")
 
-            val json = if (response.body.nonEmpty) Some(response.json) else None
-            // more than one handler is meaningless so exec the first one and ignore other
-            suitableHandlers.head._2(json, response.allHeaders)
+            if (suitableHandlers.par.nonEmpty) {
+              val json = if (response.body.nonEmpty) Some(response.json) else None
+              // more than one handler is meaningless so exec the first one and ignore other
+              suitableHandlers.head._2(json, response.allHeaders)
+            } else {
+              defaultErrorHandler(response)
+            }
         }
       }
     } catch {
-      case _: ConnectException => throw new ArangoException(408, "No response from ArangoDB server.")
+      case _: ConnectException => Future.successful(Left(ArangoError(408, 0, "No response from ArangoDB server.")))
     }
   }
 
   override def defaultSuccessHandler[T](
                                          body: Option[JsValue],
                                          headers: Map[String, Seq[String]]
-                                       )(implicit objectReads: Reads[T]): Option[T] = body.map { json => parseResponseJson[T](json) }
+                                       )(implicit objectReads: Reads[T]): Either[ArangoError, T] =
+    body match {
+      case Some(json) => parseResponseJson[T](json)
+      case None => Left(ArangoError(500, 0, "Empty response"))
+    }
 
-  override def defaultNotfoundHandler[T](
-                                          body: Option[JsValue],
-                                          headers: Map[String, Seq[String]]
-                                        )(implicit objectReads: Reads[T]): Option[T] = None
-
-  private def parseResponseJson[T](json: JsValue)(implicit objectReads: Reads[T]): T = {
+  private def parseResponseJson[T](json: JsValue)(implicit objectReads: Reads[T]): Either[ArangoError, T] = {
     json.validate[T] fold(
-      error => throw new ArangoException(600, "Can't parse response"),
-      responseObject => responseObject
+      error => Left(ArangoError(600, 0, "Can't parse response")),
+      responseObject => Right(responseObject)
       )
+  }
+
+  private def defaultErrorHandler(response: WSResponse) = {
+    if (response.body.nonEmpty) {
+      response.json.validate[ArangoError] fold(
+        error => Left(ArangoError(response.status, 0, s"Unexpected response status code")),
+        responseError => Left(responseError)
+        )
+    } else {
+      Left(ArangoError(response.status, 0, s"Unexpected response status code"))
+    }
   }
 }
