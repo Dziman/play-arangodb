@@ -9,4 +9,4 @@ trait Document {
 
 case class Documents(documents: List[String])
 
-case class RemoveDocumentResult(_id: String, _key: String, _rev: String) extends Document
+case class DocumentResult(_id: String, _key: String, _rev: String) extends Document

@@ -29,5 +29,5 @@ package object model {
 
   //JSON Reads/Writes for Document API
   implicit val documentsJsonReads = Json.reads[Documents]
-  implicit val removeDocumentResultJsonReads = Json.reads[RemoveDocumentResult]
+  implicit val DocumentResultJsonReads = Json.reads[DocumentResult]
 }

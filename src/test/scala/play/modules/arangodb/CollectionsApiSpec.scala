@@ -43,7 +43,7 @@ object CollectionsApiSpec extends PlayArangoSpec {
     }
 
     "count documents number in collection" in new WithFreshDb {
-      await(Collection.documentsCount(name = collectionForTest)).right.get === 2L
+      await(Collection.documentsCount(name = collectionForTest)).right.get === 3L
     }
 
     "return 0 as documents number for empty collection" in new WithFreshDb {
@@ -137,9 +137,9 @@ object CollectionsApiSpec extends PlayArangoSpec {
       val ch5 = ch5Result.right.get.checksum
       ch5 must be some
 
-      ch1 === Some(172416944L)
-      ch3 === Some(2742834720L)
-      ch5 === Some(172416944L)
+      ch1 === Some(3499461694L)
+      ch3 === Some(424679461L)
+      ch5 === Some(3499461694L)
       // can't check checksums calculated withRevisions = true due to every db restore changes revision
 
       ch1 must be_!=(ch2)
